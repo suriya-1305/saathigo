@@ -25,6 +25,8 @@ class User(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     city: Mapped[str | None] = mapped_column(String(120))
     upi_id: Mapped[str | None] = mapped_column(String(120))
+    # ISO country the user is in right now (None = India). Drives "buy & bring" vs "buy this too".
+    current_country: Mapped[str | None] = mapped_column(String(2))
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
 
 

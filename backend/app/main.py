@@ -8,13 +8,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import agents, auth, meta, payments, requests, shipments, trips
 from app.core.config import settings
-from app.db import Base, engine
+from app.db import Base, engine, ensure_columns
 
 logging.basicConfig(level=logging.INFO)
 
 
 def create_app() -> FastAPI:
     Base.metadata.create_all(bind=engine)
+    ensure_columns()
 
     app = FastAPI(title=f"{settings.app_name} API", version="1.0.0")
     app.add_middleware(

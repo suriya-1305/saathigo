@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, ApiError, flag, formatDate, formatINR, startCheckout } from "../api/client";
-import type { ProductRequest } from "../api/types";
+import type { ProductRequest, Trip } from "../api/types";
 import { ErrorBox, Spinner, StatusBadge, Steps } from "../components/Layout";
 import { PhotoCapture } from "../components/PhotoCapture";
 import { AgentActivity, SupportChat, TravellerMatches } from "../components/Saathi";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, useCountries, useMyLocation } from "../context/AuthContext";
 
 const FLOW = ["open", "accepted", "paid", "purchased", "delivered"];
 const FLOW_LABELS = ["Offers", "Accepted", "Paid (escrow)", "Purchased", "Delivered"];
@@ -68,13 +68,13 @@ export default function RequestDetail() {
         {req.is_traveller && <TravellerPanel req={req} run={run} />}
         {!req.is_buyer && !req.is_traveller && req.status === "open" &&
           (user ? (
-            <OfferForm req={req} run={run} />
+            <BuyOrBring req={req} run={run} />
           ) : (
             <div className="card">
               <Link to="/login" state={{ from: `/buy/${req.id}` }}>
                 Log in
               </Link>{" "}
-              to make an offer.
+              to buy this or bring it.
             </div>
           ))}
         {(req.is_buyer || req.is_traveller) && (
@@ -268,8 +268,69 @@ function OfferForm({ req, run }: { req: ProductRequest; run: Run }) {
           )
         }
       >
-        I can bring this
+        🛒 Buy &amp; bring it — earn {formatINR(req.reward_paise)}
       </button>
+    </div>
+  );
+}
+
+function BuyOrBring({ req, run }: { req: ProductRequest; run: Run }) {
+  const { user } = useAuth();
+  const { location, setLocation } = useMyLocation();
+  const { name } = useCountries();
+  const navigate = useNavigate();
+  const [trips, setTrips] = useState<Trip[] | null>(null);
+  const [city, setCity] = useState(user?.city ?? "");
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<Trip[]>("/trips/mine")
+      .then(setTrips)
+      .catch(() => setTrips([]));
+  }, []);
+  if (!trips) return <Spinner />;
+
+  const flying = trips.some(
+    (t) => t.status === "active" && t.origin_country === req.source_country && t.destination_country === "IN",
+  );
+  const hasOffer = req.offers?.some((o) => o.status === "pending");
+  if (hasOffer || location === req.source_country || flying) return <OfferForm req={req} run={run} />;
+
+  const wantToo = async () => {
+    setErr(null);
+    try {
+      const created = await api<ProductRequest>(`/requests/${req.id}/want`, {
+        method: "POST",
+        json: { deliver_city: city.trim() || null, quantity: 1 },
+      });
+      navigate(`/buy/${created.id}`);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : "Could not create request");
+    }
+  };
+
+  return (
+    <div className="card form">
+      <h3>Want this too?</h3>
+      <p className="muted small">
+        You're in {flag(location)} {name(location)}. We'll list the same product for you so a traveller from{" "}
+        {req.source_country_name} can bring it. You pay {formatINR(req.item_price_paise)} + 20% traveller reward + 2%
+        fee, only after you accept an offer.
+      </p>
+      <ErrorBox error={err} />
+      <label>
+        Deliver to (city in India)
+        <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="e.g. Chennai" />
+      </label>
+      <button className="btn btn-lg" disabled={city.trim().length < 2} onClick={wantToo}>
+        🛍️ Buy this too
+      </button>
+      <p className="muted small">
+        Actually in {req.source_country_name} or flying from there?{" "}
+        <button className="link-btn" onClick={() => setLocation(req.source_country)}>
+          Switch to buy &amp; bring it instead
+        </button>
+      </p>
     </div>
   );
 }

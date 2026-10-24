@@ -5,6 +5,7 @@ export interface User {
   phone: string | null;
   city: string | null;
   upi_id: string | null;
+  current_country?: string | null;
   is_admin?: boolean;
 }
 

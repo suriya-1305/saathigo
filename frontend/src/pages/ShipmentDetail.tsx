@@ -49,7 +49,8 @@ export default function ShipmentDetail() {
           {s.description && <p>{s.description}</p>}
           <p className="muted small">
             Value {formatINR(s.declared_value_paise)}
-            {s.weight_kg > 0 && ` · ${s.weight_kg} kg`}
+            {s.weight_kg > 0 && ` · ≈ ${s.weight_kg} kg`}
+            {s.length_cm > 0 && ` (est. ${s.length_cm}×${s.width_cm}×${s.height_cm} cm, ${s.category.replace(/_/g, " ")})`}
             {s.needed_by && ` · needed by ${formatDate(s.needed_by)}`} · Sender {s.sender.name}
           </p>
           {s.status !== "cancelled" && <Steps steps={FLOW_LABELS} current={FLOW.indexOf(s.status)} />}

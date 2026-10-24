@@ -10,13 +10,14 @@ from sqlalchemy import select
 
 from app.core.security import hash_password
 from app.data.countries import country_name, to_inr_paise
-from app.db import Base, SessionLocal, engine
+from app.db import Base, SessionLocal, engine, ensure_columns
 from app.models import (
     Offer, OfferStatus, ProductRequest, RequestStatus, Shipment, ShipmentStatus, Trip, TripStatus, User,
 )
 from app.services.agents import saathi
 from app.services.agents import shipment_items
 from app.services.pricing import buy_pricing, send_pricing
+from app.services.weight import estimate_weight
 
 PASSWORD = "secret123"
 D = lambda days: date.today() + timedelta(days=days)  # noqa: E731
@@ -101,6 +102,7 @@ def seed() -> dict:
     import json
 
     Base.metadata.create_all(bind=engine)
+    ensure_columns()
     created = {"users": 0, "shipments": 0, "requests": 0, "trips": 0}
     with SessionLocal() as db:
         by_key: dict[str, User] = {}
@@ -119,7 +121,7 @@ def seed() -> dict:
             report = _compliance(item, desc, cc)
             db.add(Shipment(
                 sender_id=u.id, item_name=item, description=desc,
-                category=saathi._guess_category(f"{item} {desc or ''}"), weight_kg=0,
+                category=saathi._guess_category(f"{item} {desc or ''}"), weight_kg=0, length_cm=0, width_cm=0, height_cm=0,
                 declared_value_paise=p.value_paise, pickup_city=pickup, destination_country=cc,
                 destination_city=city, recipient_name="", recipient_phone="", recipient_address="",
                 needed_by=D(days), shipping_provider="value_based", courier_estimate_paise=0,
@@ -179,6 +181,12 @@ def seed() -> dict:
             s.declared_value_paise, s.price_paise = p.value_paise, p.price_paise
             s.traveller_payout_paise, s.platform_fee_paise = p.traveller_payout_paise, p.platform_fee_paise
             s.shipping_provider, s.courier_estimate_paise = "value_based", 0
+        db.flush()
+        # Parcels listed without a weight get an estimate from their category / item type
+        for s in db.scalars(select(Shipment).where((Shipment.weight_kg == 0) | (Shipment.weight_kg.is_(None)))).all():
+            est = estimate_weight(s.category, s.item_name, s.description)
+            s.weight_kg, s.length_cm, s.width_cm, s.height_cm = (
+                est.chargeable_kg, est.length_cm, est.width_cm, est.height_cm)
         for r in db.scalars(select(ProductRequest).where(ProductRequest.status == RequestStatus.OPEN)).all():
             p = buy_pricing(r.item_price_paise, r.quantity)
             r.reward_paise, r.service_fee_paise, r.total_paise = p.reward_paise, p.service_fee_paise, p.total_paise

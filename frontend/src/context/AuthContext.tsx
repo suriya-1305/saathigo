@@ -65,3 +65,21 @@ export function useCountries() {
   const name = (code: string) => countries.find((c) => c.code === code)?.name ?? code;
   return { countries, abroad: countries.filter((c) => c.code !== "IN"), name };
 }
+
+const LOC_KEY = "saathigo.location";
+
+/** Where the viewer is right now (ISO code). Saved on the profile when logged in, else in localStorage. */
+export function useMyLocation() {
+  const { user, refreshUser } = useAuth();
+  const [local, setLocal] = useState<string>(() => localStorage.getItem(LOC_KEY) ?? "IN");
+  const location = user ? user.current_country ?? "IN" : local;
+  const setLocation = async (code: string) => {
+    localStorage.setItem(LOC_KEY, code);
+    setLocal(code);
+    if (user) {
+      await api("/auth/me", { method: "PATCH", json: { current_country: code } });
+      await refreshUser();
+    }
+  };
+  return { location, setLocation };
+}

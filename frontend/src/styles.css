@@ -285,3 +285,6 @@ figure { margin: 0; }
 .popup-meta { margin-top: 6px; }
 .chip-sm { padding: 4px 10px; font-size: 0.8rem; }
 .optional-block summary { cursor: pointer; color: var(--muted); font-size: 0.9rem; margin-bottom: 8px; }
+
+.card-cta { margin-top: 0.5rem; align-self: flex-start; }
+.link-btn { background: none; border: 0; padding: 0; color: var(--brand); text-decoration: underline; cursor: pointer; font: inherit; }

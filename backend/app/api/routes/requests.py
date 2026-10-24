@@ -3,6 +3,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -112,6 +113,57 @@ def get_request(request_id: int, viewer: User | None = Depends(get_optional_user
     return request_out(_get(db, request_id), viewer, detail=True)
 
 
+_ACTIVE_REQUEST = (RequestStatus.OPEN, RequestStatus.ACCEPTED, RequestStatus.PAID, RequestStatus.PURCHASED)
+
+
+def _is_bringing(db: Session, user: User, product_url: str) -> bool:
+    """User has a live offer on, or is the traveller for, any request for this product."""
+    rows = db.scalars(select(ProductRequest).where(ProductRequest.product_url == product_url,
+                                                   ProductRequest.status.in_(_ACTIVE_REQUEST))).all()
+    for r in rows:
+        if r.traveller_id == user.id or any(o.traveller_id == user.id and o.status == OfferStatus.PENDING
+                                            for o in r.offers):
+            return True
+    return False
+
+
+def _is_buying(db: Session, user: User, product_url: str) -> bool:
+    return db.scalar(select(ProductRequest.id).where(
+        ProductRequest.buyer_id == user.id, ProductRequest.product_url == product_url,
+        ProductRequest.status.in_(_ACTIVE_REQUEST))) is not None
+
+
+class WantIn(BaseModel):
+    deliver_city: str | None = Field(default=None, min_length=2, max_length=120)
+    quantity: int = Field(default=1, ge=1, le=10)
+
+
+@router.post("/{request_id}/want", response_model=ProductRequestOut, status_code=201)
+def want_too(request_id: int, body: WantIn, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """'Buy this too': list your own request for the same product so a traveller can bring one for you."""
+    src = _get(db, request_id)
+    if src.buyer_id == user.id or _is_buying(db, user, src.product_url):
+        raise HTTPException(409, "You've already requested this product")
+    if _is_bringing(db, user, src.product_url):
+        raise HTTPException(409, "You're bringing this product for someone - you can't also buy it here. "
+                                 "Withdraw your offer first.")
+    city = body.deliver_city or user.city
+    if not city:
+        raise HTTPException(400, "Tell us which city in India to deliver to")
+    pricing = buy_pricing(src.item_price_paise, body.quantity)
+    req = ProductRequest(
+        buyer_id=user.id, product_url=src.product_url, title=src.title, description=src.description,
+        image_url=src.image_url, store_name=src.store_name, quantity=body.quantity,
+        price_amount=src.price_amount, price_currency=src.price_currency, item_price_paise=src.item_price_paise,
+        reward_paise=pricing.reward_paise, service_fee_paise=pricing.service_fee_paise,
+        total_paise=pricing.total_paise, source_country=src.source_country, deliver_city=city,
+    )
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+    return request_out(req, user, detail=True)
+
+
 @router.post("/{request_id}/offers", response_model=OfferOut, status_code=201)
 def make_offer(request_id: int, body: OfferIn, user: User = Depends(get_current_user),
                db: Session = Depends(get_db)):
@@ -120,6 +172,9 @@ def make_offer(request_id: int, body: OfferIn, user: User = Depends(get_current_
         raise HTTPException(400, "You cannot offer on your own request")
     if req.status != RequestStatus.OPEN:
         raise HTTPException(409, "Request is no longer accepting offers")
+    if _is_buying(db, user, req.product_url):
+        raise HTTPException(409, "You've requested this product yourself - you can't also bring it. "
+                                 "Cancel your request first.")
     trip = resolve_trip(db, user, origin_country=req.source_country, origin_city=country_name(req.source_country),
                         destination_country="IN", destination_city=req.deliver_city, trip_id=body.trip_id,
                         travel_date=body.travel_date, needed_by=req.needed_by)

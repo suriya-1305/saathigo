@@ -99,12 +99,20 @@ is unreachable or refuses. **A person always confirms** the final step (create o
 - `status: hitl_triggered` from AgenticOrg (low confidence) and every escalation land in the **human review queue** at `/review` — visible to users listed in `ADMIN_EMAILS`.
 - Compliance results are bound to the exact item list with a short-lived signed token, so the shipment form can't reuse a check for different items.
 - Config (`backend/.env`): `AGENTICORG_API_KEY`, `AGENTICORG_BASE_URL`, `AGENT_*_ID`. `AGENT_PROVIDER=mock` forces the rule-based fallbacks (used by the tests). Keep the API key out of git.
-- No migrations yet: after pulling schema changes, delete `backend/tagalong.db` (dev SQLite) so tables are recreated.
+- No Alembic yet: new tables are created on startup and newly added columns are applied by `ensure_columns()` in `app/db.py`.
 
 ## Business rules (configurable in `.env`)
 - `TRAVELLER_REWARD_PCT=0.20` — traveller earns 20% of the product value (send and buy).
 - `PLATFORM_FEE_PCT=0.02` — SaathiGo keeps 2% of the product value.
 - `BOARDING_PASS_ENABLED=false` — boarding-pass scan/verify flow off; anyone can carry.
+- **Weight** is estimated from category + item (`app/services/weight.py`): chargeable = max(actual, L×W×H/5000), never 0 kg.
+- **Buy or bring, never both.** On `/buy` you set "You're in": requests from that country (or a country you have an active trip from) show **Buy & bring** (earn 20%); everything else shows **Buy this too** (`POST /api/requests/{id}/want` lists the same product for you). The API rejects bringing a product you've requested, and requesting one you're bringing.
+
+## Deploy (Docker / Render)
+The root `Dockerfile` builds the frontend and serves it from FastAPI (`STATIC_DIR`), so it's one service.
+1. Render → **New → Blueprint** → pick `suriya-1305/saathigo` (uses `render.yaml`).
+2. Set the secrets: `AGENTICORG_API_KEY`, Pine Labs keys, and `FRONTEND_URL` / `BACKEND_URL` / `CORS_ORIGINS` = your Render URL.
+3. The free tier's disk is ephemeral: SQLite is re-seeded with demo data on each start. Use Postgres (`DATABASE_URL`) for real data.
 
 ## Not yet included (next steps)
 - Automated traveller payout settlement (Payout records are created as `pending`; settle via Pine Labs payouts/UPI as an ops job).

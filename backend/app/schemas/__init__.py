@@ -31,6 +31,7 @@ class UserOut(ORM):
     phone: str | None
     city: str | None
     upi_id: str | None
+    current_country: str | None = None
     is_admin: bool = False
 
 
@@ -45,6 +46,17 @@ class UserUpdate(BaseModel):
     phone: str | None = Field(default=None, max_length=20)
     city: str | None = Field(default=None, max_length=120)
     upi_id: str | None = Field(default=None, max_length=120)
+    current_country: str | None = Field(default=None, min_length=2, max_length=2)
+
+    @field_validator("current_country")
+    @classmethod
+    def _known_country(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.upper()
+        if v not in COUNTRIES:
+            raise ValueError("Unsupported country")
+        return v
 
 
 class TokenOut(BaseModel):

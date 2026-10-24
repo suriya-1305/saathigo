@@ -3,7 +3,7 @@ import { flag, formatDate, formatINR } from "../api/client";
 import type { ProductRequest, Shipment } from "../api/types";
 import { StatusBadge } from "./Layout";
 
-export function RequestCard({ r }: { r: ProductRequest }) {
+export function RequestCard({ r, location }: { r: ProductRequest; location?: string }) {
   return (
     <Link to={`/buy/${r.id}`} className="card item-card">
       <div className="thumb">{r.image_url ? <img src={r.image_url} alt="" loading="lazy" /> : <span>🛍️</span>}</div>
@@ -26,6 +26,11 @@ export function RequestCard({ r }: { r: ProductRequest }) {
           </span>
           <span className="reward">Reward {formatINR(r.reward_paise)}</span>
         </div>
+        {location && !r.is_buyer && r.status === "open" && (
+          <span className="btn btn-sm card-cta">
+            {location === r.source_country ? `🛒 Buy & bring · earn ${formatINR(r.reward_paise)}` : "🛍️ Buy this too"}
+          </span>
+        )}
       </div>
     </Link>
   );
@@ -59,6 +64,7 @@ export function ShipmentCard({ s }: { s: Shipment }) {
         {s.is_sender && <span className="badge badge-mine">Your parcel</span>}
         <p className="muted small">
           Value {formatINR(s.declared_value_paise)}
+          {s.weight_kg > 0 && ` · ≈ ${s.weight_kg} kg`}
           {s.needed_by ? ` · by ${formatDate(s.needed_by)}` : ""}
         </p>
         <div className="row space-between">

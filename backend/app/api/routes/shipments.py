@@ -17,6 +17,7 @@ from app.services import agents, escrow
 from app.services.pricing import send_pricing
 from app.services.storage import save_photo
 from app.services.trip_link import resolve_trip
+from app.services.weight import estimate_weight
 
 router = APIRouter(prefix="/shipments", tags=["send-overseas"])
 

@@ -295,7 +295,7 @@ def _guess_category(text: str) -> str:
     t = text.lower()
     rules = [("documents", r"document|paper|certificate|passport|letter"),
              ("medicines_prescribed", r"medicine|tablet|prescription|syrup"),
-             ("clothing", r"kurta|saree|sari|shirt|dress|cloth|lehenga|dupatta|shawl|jacket"),
+             ("clothing", r"kurta|saree|sari|shirt|dress|cloth|lehenga|dupatta|shawl|jacket|ethnic wear|kidswear"),
              ("food_sealed", r"sweet|mithai|laddoo|ladoo|pickle|achar|masala|snack|namkeen|tea|food|spice|katli"),
              ("books", r"book|novel"),
              ("electronics_small", r"phone|charger|earbud|headphone|watch|camera|laptop|kindle"),

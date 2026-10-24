@@ -178,3 +178,38 @@ def test_assistant_answers_about_my_orders(client, make_user):
 @pytest.mark.parametrize("path", ["/api/requests/mine", "/api/shipments/mine", "/api/trips/mine"])
 def test_auth_required(client, path):
     assert client.get(path).status_code == 401
+
+
+def test_buy_or_bring_is_exclusive(client, make_user):
+    buyer, other, bringer = make_user("Buyer"), make_user("Other"), make_user("Bringer")
+    r = client.patch("/api/auth/me", headers=other["headers"], json={"current_country": "us"})
+    assert r.status_code == 200 and r.json()["current_country"] == "US"
+    assert client.patch("/api/auth/me", headers=other["headers"], json={"current_country": "XX"}).status_code == 422
+
+    req = client.post("/api/requests", headers=buyer["headers"], json={
+        "product_url": "https://www.amazon.com/dp/B0EXCL", "title": "Kindle", "price_amount": 100,
+        "price_currency": "USD", "source_country": "US", "deliver_city": "Pune",
+    }).json()
+    assert client.post(f"/api/requests/{req['id']}/offers", headers=buyer["headers"], json={}).status_code == 400
+
+    # "Buy this too" copies the product for another buyer
+    r = client.post(f"/api/requests/{req['id']}/want", headers=other["headers"], json={"deliver_city": "Chennai"})
+    assert r.status_code == 201, r.text
+    mine = r.json()
+    assert mine["product_url"] == req["product_url"] and mine["deliver_city"] == "Chennai"
+    assert mine["total_paise"] == req["total_paise"]
+    assert client.post(f"/api/requests/{req['id']}/want", headers=other["headers"], json={}).status_code == 409
+    # ...so they can't also bring the same product
+    r = client.post(f"/api/requests/{req['id']}/offers", headers=other["headers"], json={})
+    assert r.status_code == 409
+
+    # A traveller bringing it can't also buy it
+    assert client.post(f"/api/requests/{req['id']}/offers", headers=bringer["headers"], json={}).status_code == 201
+    assert client.post(f"/api/requests/{req['id']}/want", headers=bringer["headers"], json={}).status_code == 409
+
+
+def test_weight_estimate_is_never_zero(client, make_user):
+    from app.services.weight import estimate_weight
+    assert estimate_weight("clothing", "Silk saree", None).chargeable_kg >= 0.5
+    assert estimate_weight("books", "3 novels", None).chargeable_kg > estimate_weight("books", "novel", None).chargeable_kg
+    assert estimate_weight("gifts", "Gujarati snacks", None).chargeable_kg > 0
